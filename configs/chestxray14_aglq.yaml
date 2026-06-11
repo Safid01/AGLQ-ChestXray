@@ -1,0 +1,106 @@
+project_name: "AGLQ-ChestXray"
+
+dataset:
+  name: "ChestXray14"
+  image_dir: "datasets/ChestXray14/images"
+  train_csv: "datasets/ChestXray14/train.csv"
+  val_csv: "datasets/ChestXray14/val.csv"
+  test_csv: "datasets/ChestXray14/test.csv"
+  image_size: 224
+  num_classes: 14
+
+classes:
+  - Atelectasis
+  - Cardiomegaly
+  - Effusion
+  - Infiltration
+  - Mass
+  - Nodule
+  - Pneumonia
+  - Pneumothorax
+  - Consolidation
+  - Edema
+  - Emphysema
+  - Fibrosis
+  - Pleural_Thickening
+  - Hernia
+
+model:
+  # Supported names: DenseNet121, ResNet50, EfficientNet_B3, Query2Label, DenseNet121_AGLQ
+  name: "Query2Label"
+  backbone: "densenet121"
+  pretrained: true
+  hidden_dim: 256
+  num_heads: 4
+  num_decoder_layers: 2
+  dropout: 0.2
+
+aglq:
+  query_dim: 256
+  num_attention_heads: 4
+  num_layers: 1
+  dropout: 0.1
+
+training:
+  epochs: 10
+  batch_size: 8
+  num_workers: 2
+  optimizer: "adamw"
+  learning_rate: 0.00003
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  loss: "bce"
+  device: "auto"
+  seed: 42
+
+early_stopping:
+  enabled: true
+  patience: 3
+  monitor: "val_map"
+
+augmentation:
+  horizontal_flip: true
+  rotation_degree: 10
+
+normalization:
+  mean:
+    - 0.485
+    - 0.456
+    - 0.406
+  std:
+    - 0.229
+    - 0.224
+    - 0.225
+
+metrics:
+  - map
+  - auroc
+  - macro_f1
+  - per_class_auroc
+
+threshold:
+  tune_on_validation: true
+  default: 0.5
+  search_min: 0.1
+  search_max: 0.9
+  search_step: 0.05
+
+checkpoint:
+  save_dir: "outputs/checkpoints"
+  save_best_only: true
+  monitor: "val_map"
+  filename: "best_query2label.pth"
+
+logging:
+  print_frequency: 20
+
+output:
+  results_dir: "outputs/results"
+  figures_dir: "outputs/figures"
+
+visualization:
+  gradcam: false
+  attention_maps: false
+
+experiment:
+  name: "Query2Label_ChestXray14"

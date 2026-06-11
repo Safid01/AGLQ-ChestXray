@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+
+datasets/ChestXray14/images/*.png
+
+outputs/checkpoints/*.pth
+outputs/checkpoints/*.pt

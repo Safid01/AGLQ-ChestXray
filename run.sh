@@ -1,0 +1,1 @@
+python scripts/train_aglq.py --config configs/chestxray14_aglq.yaml
