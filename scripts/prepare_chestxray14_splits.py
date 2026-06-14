@@ -22,6 +22,25 @@ LABELS = [
     "Hernia",
 ]
 
+NIH_LABEL_MAP = {
+    "Atelectasis": ["Atelectasis"],
+    "Cardiomegaly": ["Cardiomegaly"],
+    "Effusion": ["Effusion"],
+    "Infiltration": ["Infiltration"],
+    "Mass": ["Mass"],
+    "Nodule": ["Nodule"],
+    "Pneumonia": ["Pneumonia"],
+    "Pneumothorax": ["Pneumothorax"],
+    "Consolidation": ["Consolidation"],
+    "Edema": ["Edema"],
+    "Emphysema": ["Emphysema"],
+    "Fibrosis": ["Fibrosis"],
+    # Some NIH metadata files use a space, others use an underscore.
+    # The project output column remains Pleural_Thickening.
+    "Pleural_Thickening": ["Pleural Thickening", "Pleural_Thickening"],
+    "Hernia": ["Hernia"],
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create ChestX-ray14 train/val/test CSV splits.")
@@ -64,10 +83,14 @@ def add_label_columns(data: pd.DataFrame) -> pd.DataFrame:
     output = pd.DataFrame()
     output["image_path"] = data["Image Index"]
 
-    findings = data["Finding Labels"].fillna("").str.split("|")
+    findings = data["Finding Labels"].fillna("").apply(
+        lambda value: {label.strip() for label in str(value).split("|")}
+    )
     for label in LABELS:
-        raw_label = label.replace("_", " ")
-        output[label] = findings.apply(lambda row_labels: int(raw_label in row_labels))
+        raw_labels = NIH_LABEL_MAP[label]
+        output[label] = findings.apply(
+            lambda row_labels: int(any(raw_label in row_labels for raw_label in raw_labels))
+        )
 
     return output
 

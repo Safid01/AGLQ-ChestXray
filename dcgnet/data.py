@@ -11,7 +11,15 @@ from torchvision import transforms
 class ChestXray14Dataset(Dataset):
     """Dataset for ChestX-ray14 multi-label classification."""
 
-    def __init__(self, csv_path: str | Path, image_dir: str | Path, labels: list[str], image_size: int):
+    def __init__(
+        self,
+        csv_path: str | Path,
+        image_dir: str | Path,
+        labels: list[str],
+        image_size: int,
+        augment: bool = False,
+        augmentation_config: dict[str, Any] | None = None,
+    ):
         self.csv_path = Path(csv_path)
         self.image_dir = Path(image_dir)
         self.labels = labels
@@ -19,9 +27,27 @@ class ChestXray14Dataset(Dataset):
         self.data = pd.read_csv(self.csv_path)
         self._check_columns()
 
-        self.transform = transforms.Compose(
+        augmentation_config = augmentation_config or {}
+        transform_steps = [transforms.Resize((image_size, image_size))]
+
+        if augment:
+            if augmentation_config.get("horizontal_flip", False):
+                transform_steps.append(transforms.RandomHorizontalFlip(p=0.5))
+
+            rotation_degree = augmentation_config.get("rotation_degree", 0)
+            if rotation_degree > 0:
+                transform_steps.append(transforms.RandomRotation(degrees=rotation_degree))
+
+            if augmentation_config.get("color_jitter", False):
+                transform_steps.append(
+                    transforms.ColorJitter(
+                        brightness=augmentation_config.get("brightness", 0.05),
+                        contrast=augmentation_config.get("contrast", 0.05),
+                    )
+                )
+
+        transform_steps.extend(
             [
-                transforms.Resize((image_size, image_size)),
                 transforms.ToTensor(),
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406],
@@ -29,6 +55,7 @@ class ChestXray14Dataset(Dataset):
                 ),
             ]
         )
+        self.transform = transforms.Compose(transform_steps)
 
     def _check_columns(self) -> None:
         required_columns = ["image_path", *self.labels]
@@ -78,6 +105,8 @@ def get_dataloaders(config: Any) -> tuple[DataLoader, DataLoader, DataLoader]:
         image_dir=dataset_cfg["image_dir"],
         labels=labels,
         image_size=dataset_cfg["image_size"],
+        augment=True,
+        augmentation_config=cfg.get("augmentation", {}),
     )
     val_dataset = ChestXray14Dataset(
         csv_path=dataset_cfg["val_csv"],

@@ -2,11 +2,11 @@ from pathlib import Path
 
 import torch
 
-from aglq.metrics import compute_metrics
+from dcgnet.metrics import compute_metrics
 
 
 class Trainer:
-    """Simple trainer for the DenseNet121 baseline."""
+    """Training and validation loop for multi-label chest X-ray models."""
 
     def __init__(
         self,
@@ -21,6 +21,7 @@ class Trainer:
         print_frequency: int = 20,
         early_stopping_patience: int | None = None,
         threshold_config: dict | None = None,
+        graph_auxiliary_weight: float = 0.0,
     ):
         self.model = model.to(device)
         self.criterion = criterion
@@ -36,6 +37,45 @@ class Trainer:
         self.print_frequency = print_frequency
         self.early_stopping_patience = early_stopping_patience
         self.threshold_config = threshold_config or {}
+        self.graph_auxiliary_weight = graph_auxiliary_weight
+
+    @staticmethod
+    def _xpu_sync() -> None:
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            torch.xpu.synchronize()
+
+    @staticmethod
+    def _xpu_clear_cache() -> None:
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            torch.xpu.empty_cache()
+
+    @staticmethod
+    def _get_logits(model_output):
+        if isinstance(model_output, dict):
+            return model_output["logits"]
+        return model_output
+
+    def _compute_loss(self, model_output, labels):
+        logits = self._get_logits(model_output)
+        loss = self.criterion(logits, labels)
+
+        if (
+            isinstance(model_output, dict)
+            and self.graph_auxiliary_weight > 0
+            and "graph_logits" in model_output
+        ):
+            graph_loss = self.criterion(model_output["graph_logits"], labels)
+            loss = loss + self.graph_auxiliary_weight * graph_loss
+
+        return loss, logits
+
+    @staticmethod
+    def _format_threshold(metrics: dict) -> str:
+        per_class_threshold = metrics.get("per_class_threshold")
+        if isinstance(per_class_threshold, dict) and per_class_threshold:
+            values = [float(value) for value in per_class_threshold.values()]
+            return f"per-class mean {sum(values) / len(values):.2f}"
+        return f"{metrics.get('threshold', 0.5):.2f}"
 
     def train_one_epoch(self, train_loader, epoch: int) -> float:
         self.model.train()
@@ -47,18 +87,23 @@ class Trainer:
             labels = labels.to(self.device)
 
             self.optimizer.zero_grad()
-            logits = self.model(images)
-            loss = self.criterion(logits, labels)
+            model_output = self.model(images)
+            loss, _ = self._compute_loss(model_output, labels)
             loss.backward()
             self.optimizer.step()
 
-            total_loss += loss.item() * images.size(0)
+            self._xpu_sync()
+            loss_value = loss.item()
+            total_loss += loss_value * images.size(0)
 
             if batch_index == 1 or batch_index % self.print_frequency == 0 or batch_index == num_batches:
                 print(
                     f"Epoch {epoch:03d} train batch {batch_index}/{num_batches} | "
-                    f"loss: {loss.item():.4f}"
+                    f"loss: {loss_value:.4f}"
                 )
+
+            if batch_index % 200 == 0:
+                self._xpu_clear_cache()
 
         return total_loss / len(train_loader.dataset)
 
@@ -73,13 +118,15 @@ class Trainer:
             images = images.to(self.device)
             labels = labels.to(self.device)
 
-            logits = self.model(images)
-            loss = self.criterion(logits, labels)
+            model_output = self.model(images)
+            loss, logits = self._compute_loss(model_output, labels)
 
+            self._xpu_sync()
             total_loss += loss.item() * images.size(0)
             all_logits.append(logits.cpu())
             all_labels.append(labels.cpu())
 
+        self._xpu_clear_cache()
         all_logits = torch.cat(all_logits, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
         metrics = compute_metrics(all_logits, all_labels, self.class_names, self.threshold_config)
@@ -129,7 +176,7 @@ class Trainer:
                 f"val mAP: {val_metrics['mAP']:.4f} | "
                 f"val AUROC: {val_metrics['macro_auroc']:.4f} | "
                 f"val F1: {val_metrics['macro_f1']:.4f} | "
-                f"F1 threshold: {val_metrics['threshold']:.2f} | "
+                f"F1 threshold: {self._format_threshold(val_metrics)} | "
                 f"best checkpoint: {checkpoint_text}"
             )
 

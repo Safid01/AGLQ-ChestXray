@@ -1,51 +1,51 @@
-# AGLQ Chest X-ray
+# DCGNet Chest X-ray
 
-Project skeleton for training an AGLQ-style multi-label classifier on ChestX-ray14.
+Implementation for:
+
+**Disease Co-occurrence Guided Network for Multi-Label Chest X-ray Diagnosis**
+
+The project trains DenseNet121_DCGNet and baseline models on NIH ChestXray14.
 
 ## Structure
 
 - `configs/`: experiment configuration files
 - `baselines/`: baseline model definitions
-- `aglq/`: package code for data, model, losses, metrics, and training
+- `dcgnet/`: data, model, losses, metrics, and training code
 - `scripts/`: runnable entry points
+- `datasets/ChestXray14/`: ChestXray14 images and split CSV files
+- `outputs/`: checkpoints and result CSV files
 
-## Quick Start
+## Dataset Format
 
-```bash
-pip install -r requirements.txt
-bash run.sh
-```
+CSV files must contain:
 
-Expected data layout:
+- `image_path`
+- one binary column for each disease label
 
-```text
-data/ChestXray14/
-  images/
-  train.csv
-  val.csv
-  test.csv
-```
+The 14 labels are listed in `configs/chestxray14_dcgnet.yaml`.
 
-CSV files should include an `image` column and one binary column for each label listed in `configs/chestxray14_aglq.yaml`.
-
-## Experiments
-
-Train the DenseNet121 baseline:
+## Train DCG-Net
 
 ```bash
-python scripts/train_aglq.py --config configs/chestxray14_aglq.yaml --mode train --model densenet121
+python scripts/train_dcgnet.py --config configs/chestxray14_dcgnet.yaml --model DenseNet121_DCGNet
 ```
 
-Train the first AG-LQ experiment, DenseNet121 plus adaptive label queries:
+## Test DCG-Net
 
 ```bash
-python scripts/train_aglq.py --config configs/chestxray14_aglq.yaml --mode train --model densenet121_aglq
+python scripts/train_dcgnet.py --config configs/chestxray14_dcgnet.yaml --mode test --model DenseNet121_DCGNet
 ```
 
-Evaluate a saved AG-LQ checkpoint:
+Expected outputs:
+
+- `outputs/checkpoints/best_densenet121_dcgnet.pth`
+- `outputs/results/densenet121_dcgnet_test_results.csv`
+
+## Baselines
 
 ```bash
-python scripts/train_aglq.py --config configs/chestxray14_aglq.yaml --mode test --model densenet121_aglq
+python scripts/train_dcgnet.py --config configs/chestxray14_dcgnet.yaml --model DenseNet121
+python scripts/train_dcgnet.py --config configs/chestxray14_dcgnet.yaml --model ResNet50
+python scripts/train_dcgnet.py --config configs/chestxray14_dcgnet.yaml --model EfficientNet_B3
+python scripts/train_dcgnet.py --config configs/chestxray14_dcgnet.yaml --model Query2Label
 ```
-
-The AG-LQ checkpoint is saved as `outputs/checkpoints/best_densenet121_aglq.pth`, and test results are saved under `outputs/results/`.

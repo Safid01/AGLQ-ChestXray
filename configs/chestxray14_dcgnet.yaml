@@ -1,4 +1,4 @@
-project_name: "AGLQ-ChestXray"
+project_name: "DCGNet-ChestXray"
 
 dataset:
   name: "ChestXray14"
@@ -26,25 +26,23 @@ classes:
   - Hernia
 
 model:
-  # Supported names: DenseNet121, ResNet50, EfficientNet_B3, Query2Label, DenseNet121_AGLQ
-  name: "Query2Label"
+  name: "DenseNet121_DCGNet"
   backbone: "densenet121"
   pretrained: true
-  hidden_dim: 256
-  num_heads: 4
-  num_decoder_layers: 2
   dropout: 0.2
 
-aglq:
-  query_dim: 256
-  num_attention_heads: 4
-  num_layers: 1
-  dropout: 0.1
+dcg:
+  graph_dim: 256
+  num_graph_layers: 2
+  dropout: 0.2
+  beta: 0.1
+  graph_aux_weight: 0.05
+  adjacency_source: "datasets/ChestXray14/train.csv"
 
 training:
-  epochs: 10
-  batch_size: 8
-  num_workers: 2
+  epochs: 30
+  batch_size: 16
+  num_workers: 4
   optimizer: "adamw"
   learning_rate: 0.00003
   weight_decay: 0.0001
@@ -55,12 +53,18 @@ training:
 
 early_stopping:
   enabled: true
-  patience: 3
+  patience: 8
   monitor: "val_map"
+
+initialization:
+  from_densenet: true
+  densenet_checkpoint: "outputs/checkpoints/best_densenet121.pth"
 
 augmentation:
   horizontal_flip: true
   rotation_degree: 10
+  brightness: 0.1
+  contrast: 0.1
 
 normalization:
   mean:
@@ -74,25 +78,36 @@ normalization:
 
 metrics:
   - map
-  - auroc
+  - macro_auroc
+  - micro_auroc
   - macro_f1
+  - micro_f1
+  - macro_precision
+  - macro_recall
+  - micro_precision
+  - micro_recall
   - per_class_auroc
+  - per_class_ap
+  - per_class_f1
+  - per_class_precision
+  - per_class_recall
 
 threshold:
   tune_on_validation: true
+  per_class: true
   default: 0.5
-  search_min: 0.1
-  search_max: 0.9
-  search_step: 0.05
+  search_min: 0.05
+  search_max: 0.5
+  search_step: 0.01
 
 checkpoint:
   save_dir: "outputs/checkpoints"
   save_best_only: true
   monitor: "val_map"
-  filename: "best_query2label.pth"
+  filename: "best_densenet121_dcgnet.pth"
 
 logging:
-  print_frequency: 20
+  print_frequency: 100
 
 output:
   results_dir: "outputs/results"
@@ -103,4 +118,4 @@ visualization:
   attention_maps: false
 
 experiment:
-  name: "Query2Label_ChestXray14"
+  name: "DCGNet_Full_ChestXray14"
